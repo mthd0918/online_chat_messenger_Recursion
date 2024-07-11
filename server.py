@@ -2,7 +2,7 @@ import socket
 import time
 import threading
 
-class ChatServer:
+class UDPChatServer:
     def __init__(self, server_address='0.0.0.0', server_port=9001):
         self.server_address = server_address
         self.server_port = server_port
@@ -23,14 +23,14 @@ class ChatServer:
             inactive_clients = []
 
             for client_address, clients_last_sending in self.clients.items():
-                if current_time - clients_last_sending['last_sending'] > 5:
+                if current_time - clients_last_sending['last_sending'] > 30:
                     inactive_clients.append(client_address)
 
             for client_address in inactive_clients:
                 del  self.clients[client_address]
                 print(f"removed: {client_address}")
 
-            time.sleep(10)
+            time.sleep(60)
     
     def main_loop(self):
         while True:
@@ -38,62 +38,44 @@ class ChatServer:
             receive_time = time.time()
 
             try:
-                extracted_data = self.parse_data(data)
-                if len(extracted_data) != 3:
-                    raise ValueError(f"Expected 3 data items, but got {len(extracted_data)}")
-
-                client_address_str, user_name_str, message_str = extracted_data
-                parsed_client_address = self.parse_address(client_address_str)
+                header = data[:2]
+                username_size = int.from_bytes(header[:1], "big")
+                message_size = int.from_bytes(header[1:2], "big")
+                
+                body = data[2:]
+                username = body[2:username_size].decode()
+                message = body[username_size:username_size + message_size].decode()
 
                 print("**********")
-                print(f"Client Address: {client_address_str}")
-                print(f"User Name: {user_name_str}")
-                print(f"Message: {message_str}")
+                print(f"Client Address: {client_address}")
+                print(f"User Name: {username}")
+                print(f"Message: {message}")
                 print(f'Recieved: {time.strftime("%Y/%m/%d %H:%M", time.localtime(receive_time))}')
                 print("**********")
 
-                self.update_client_info(parsed_client_address, user_name_str, receive_time)
-                self.relay_messages(message_str, parsed_client_address, user_name_str)
+                self.update_client_map(username, client_address, receive_time)
+                self.relay_messages(client_address, message)
+
             except ValueError as ve:
                 print(f"Error processing data: {ve}")
             except Exception as e:
                 print(f"Unexpected error: {e}")
 
-    def parse_data(self, data):
-        data_count = data[0]
-        sizes = [data[i] for i in range(1, data_count + 1)]
-        header_length = 1 + data_count
-
-        curr_position = header_length
-        extracted_data = []
-        for size in sizes:
-            extracted_data.append(data[curr_position:curr_position+size].decode())
-            curr_position += size
-
-        return extracted_data
-    
-    def parse_address(self, address_string):
-        ip, port = address_string.split(':')
-        return (ip, int(port))
-
-    def update_client_info(self, client_address, user_name, receive_time):
+    def update_client_map(self, username, client_address, receive_time):
         self.clients[client_address] = {
-            'user_name': user_name,
+            'username': username,
             'last_sending': receive_time
         }
 
-    def relay_messages(self, message, sender_address, sender_name):
-        if isinstance(message, str):
-            message = message.encode('utf-8')
-
-        message_and_sender_name = f"{sender_name}: {message.decode()}".encode('utf-8')
-
-        for addr in self.clients:
-            if addr != sender_address:
+    def relay_messages(self, sender_address, message):
+        sender_name = self.clients[sender_address]['username']
+        formatted_message = f"{sender_name}: {message}"
+        for client_address, client_info in self.clients.items():
+            if client_address != sender_address:
                 try:
-                    self.server_socket_udp.sendto(message_and_sender_name, addr)
+                    self.server_socket_udp.sendto(formatted_message.encode(), client_address)
                 except Exception as e:
-                    print(f"Error sending message to {addr}: {e}")
+                    print(f"Error sending message to {client_info['username']} at {client_address}: {e}")
 
 if __name__ == "__main__":
     server = ChatServer()
