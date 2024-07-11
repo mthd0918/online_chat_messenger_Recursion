@@ -1,53 +1,65 @@
 import socket
 import threading
-import time
 
-SERVER_ADDRESS = "0.0.0.0"
-SERVER_PORT = 9001
+class ChatClient:
+    def __init__(self, server_address="0.0.0.0", server_port=9001):
+        self.SERVER_ADDRESS = server_address
+        self.SERVER_PORT = server_port
+        self.client_socket_udp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.client_socket_udp.bind(('', 0))
+        self.actual_address = self.client_socket_udp.getsockname()
+        self.user_name = ""
+        self.running = True
 
-client_socket_udp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-client_socket_udp.bind(('', 0))
-actual_address = client_socket_udp.getsockname()
-
-def received_messages():
-    while True:
-        try:
-            data, _ = client_socket_udp.recvfrom(4096)
-            message = data.decode()
-            print(f"{message}")
-        except Exception as e:
-            print(f"Error receiving message: {e}")
-
-receive_thread = threading.Thread(target=received_messages)
-receive_thread.daemon = True
-receive_thread.start()
-
-try:
-    DATA_COUNT = 3
-
-    user_name = input("Enter your name: ")
-    
-    while True:
-        message = input("Enter your message(or 'quit' to exit): ")
-        if message.lower() == 'quit':
-            break
+    def start(self):
+        self.user_name = input("Enter your name: ")
         
-        address_str = f"{actual_address[0]}:{actual_address[1]}"
+        receive_thread = threading.Thread(target=self.receive_messages)
+        receive_thread.daemon = True
+        receive_thread.start()
+
+        self.send_messages()
+
+    def receive_messages(self):
+        while self.running:
+            try:
+                data, _ = self.client_socket_udp.recvfrom(4096)
+                message = data.decode()
+                print(f"\n{message}")
+            except Exception as e:
+                print(f"Error receiving message: {e}")
+
+    def send_messages(self):
+        try:
+            while self.running:
+                message = input("Enter your message (or 'quit' to exit): ")
+                if message.lower() == 'quit':
+                    self.running = False
+                    break
+                
+                self.send_data(message)
+
+        except Exception as e:
+            print(f"Error: {e}")
+
+        finally:
+            self.client_socket_udp.close()
+
+    def send_data(self, message):
+        DATA_COUNT = 3
+        address_str = f"{self.actual_address[0]}:{self.actual_address[1]}"
 
         sizes = [len(address_str).to_bytes(1, "big"),
-             len(user_name).to_bytes(1, "big"),
-             len(message).to_bytes(1, "big")
-            ]
+                 len(self.user_name).to_bytes(1, "big"),
+                 len(message).to_bytes(1, "big")]
 
         header = DATA_COUNT.to_bytes(1, "big") + b''.join(sizes)
-        body = address_str.encode() + user_name.encode() + message.encode()
+        body = address_str.encode() + self.user_name.encode() + message.encode()
 
         data = header + body
 
-        client_socket_udp.sendto(data, (SERVER_ADDRESS, SERVER_PORT))
+        self.client_socket_udp.sendto(data, (self.SERVER_ADDRESS, self.SERVER_PORT))
 
-except Exception as e:
-    print(f"Error: {e}")
-
-finally:
-    client_socket_udp.close()
+if __name__ == "__main__":
+    client = ChatClient()
+    client.start()
