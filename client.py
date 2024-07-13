@@ -1,5 +1,6 @@
 import socket
 import threading
+import time
 
 class ChatClient:
     def __init__(self, server_address="localhost", tcp_port=9001, udp_port=9002):
@@ -16,7 +17,7 @@ class ChatClient:
 
     def start(self):
         self.username = input("Enter your name: ")
-
+        
         while True:
             try:
                 operation = int(input("Enter 1 to create a room, 2 to join an existing room: "))
@@ -26,17 +27,20 @@ class ChatClient:
                     print("Invalid operation. Please enter 1 or 2.")
             except ValueError:
                 print("Invalid input. Please enter a number (1 or 2).")
-
+        
         if operation == 1:
             self.room_name = input("Enter name for the new room: ")
-        else:
+        elif operation == 2:
             self.room_name = input("Enter name of the room to join: ")
-
+        else:
+            print("Invalid operation. Exiting.")
+            return
+    
         if self.tcp_handshake(operation):
             receive_thread = threading.Thread(target=self.receive_messages)
             receive_thread.daemon = True
             receive_thread.start()
-
+    
             self.send_messages()
         else:
             print("Failed to connect to the server or join/create room.")
@@ -47,18 +51,16 @@ class ChatClient:
             
             room_name_size = len(self.room_name).to_bytes(1, "big")
             operation_bytes = operation.to_bytes(1, "big")
-            state = (1 if operation == 1 else 0).to_bytes(1, "big") 
+            state = (1 if operation == 1 else 0).to_bytes(1, "big")
             payload_size = len(self.username).to_bytes(29, "big")
 
             header = room_name_size + operation_bytes + state + payload_size
             body = self.room_name.encode() + self.username.encode()
 
-            print(f"{room_name_size}, body: {body.decode()}")
-
             self.tcp_socket.send(header + body)
 
             response = self.tcp_socket.recv(1024)
-            if len(response) == 32:
+            if len(response) == 32:  # Assuming token is 32 bytes
                 self.token = response
                 print("Successfully connected to the server and joined/created room.")
                 return True
@@ -71,7 +73,6 @@ class ChatClient:
             return False
         finally:
             self.tcp_socket.close()
-
     def send_messages(self):
         try:
             while self.running:

@@ -55,17 +55,17 @@ class ChatServer:
 
             token = secrets.token_bytes(32)
 
-            if operation == 1:# Create new room
+            if operation == 1:
                 self.rooms[room_name] = [token]
                 print(f"new room created: {room_name}")
-            elif operation == 2:  # Join room
+            elif operation == 2:
                 if room_name in self.rooms:
                     self.rooms[room_name].append(token)
                     print(f"User joined room: {room_name}")
                 else:
                     client_socket.send("Room does not exist".encode())
                     return
-        
+
             self.clients[token] = {
                 'address': address,
                 'username': username,
@@ -73,8 +73,13 @@ class ChatServer:
                 'last_activity': time.time()
             }
 
+            # Send token back to client
+            client_socket.send(token)
+            print(f"Token sent to client: {token.hex()}")
+
         except Exception as e:
             print(f"Error handling TCP client: {e}")
+            client_socket.send("An error occurred".encode())
 
         finally:
             client_socket.close()
