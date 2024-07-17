@@ -20,11 +20,21 @@ class ChatServer:
         self.tcp_port = tcp_port
         self.tcp_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.tcp_socket.bind((self.server_address, self.tcp_port))
+        self.tcp_socket.listen(3)
+
+        print("***")
+        print(f"TCPサーバーが{self.server_address}:{self.tcp_port}で起動しました")
+        print("***")
 
         # udp_socket
         self.udp_port = udp_port
         self.udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.udp_socket.bind((self.server_address, self.udp_port))
+
+        print("***")
+        print(f"UDPサーバーが{self.server_address}:{self.udp_port}で起動しました")
+        print("***")
+
 
     """
     todo
@@ -67,14 +77,44 @@ class ChatServer:
             - state: guest
                 - 当該ユーザーの削除
     """
-    
+
     def tcp_main(self):
-        print("tcp")
+        while True:
+            try:
+                # 接続の待機
+                client_socket, address = self.tcp_socket.accept()
+                print(f"TCP -> クライアント{address}が接続しました")
+
+                # データの受信
+                data = client_socket.recv(4096).decode('utf-8')
+                print(f"TCP -> 受信したデータ: {data}")
+
+                # データの送信
+                response = "Hello from TCP server"
+                client_socket.send(response.encode('utf-8'))
+            finally:
+                client_socket.close()
 
     def udp_main(self):
-        print("udp")
+        while True:
+            data, address = self.udp_socket.recvfrom(4096)
+            print(f"UDP -> クライアント{address}からデータを受信: {data.decode('utf-8')}")
+
+            response = "Hello from UDP server!"
+            self.udp_socket.sendto(response.encode('utf-8'), address)
+
+    
+    def run(self):
+        tcp_thread = threading.Thread(target=self.tcp_main)
+        udp_thread = threading.Thread(target=self.udp_main)
+
+        tcp_thread.start()
+        udp_thread.start()
+
+        tcp_thread.join()
+        udp_thread.join()
+
 
 if __name__ == "__main__":
     server = ChatServer()
-    server.tcp_main()
-    server.udp_main()
+    server.run()
